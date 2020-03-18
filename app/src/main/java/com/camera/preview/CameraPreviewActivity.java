@@ -19,7 +19,6 @@ import android.util.Size;
 import android.view.Gravity;
 import android.view.TextureView;
 import android.view.View;
-import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -42,36 +41,67 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class CameraPreviewActivity extends AppCompatActivity implements ViewTreeObserver.OnGlobalLayoutListener, Camera2Listener {
+/**
+ * 预览Activity
+ *
+ * @author lqx Email:herolqx@126.com
+ */
+public class CameraPreviewActivity extends AppCompatActivity implements Camera2Listener {
     private static final String TAG = "CameraPreviewActivity";
     private static final int ACTION_REQUEST_PERMISSIONS = 1;
     private Camera2Helper camera2Helper;
     private TextureView textureView;
-    // 用于显示原始预览数据
+    /**
+     * 用于显示原始预览数据
+     */
     private ImageView ivOriginFrame;
-    // 用于显示和预览画面相同的图像数据
+    /**
+     * 用于显示和预览画面相同的图像数据
+     */
     private ImageView ivPreviewFrame;
-    // 默认打开的CAMERA
+    /**
+     * 默认打开的CAMERA
+     */
     private static final String CAMERA_ID = Camera2Helper.CAMERA_ID_BACK;
-    // 图像帧数据，全局变量避免反复创建，降低gc频率
+    /**
+     * 图像帧数据，全局变量避免反复创建，降低gc频率
+     */
     private byte[] nv21;
-    // 显示的旋转角度
+    /**
+     * 显示的旋转角度
+     */
     private int displayOrientation;
-    // 是否手动镜像预览
+    /**
+     * 是否手动镜像预览
+     */
     private boolean isMirrorPreview;
-    // 实际打开的cameraId
+    /**
+     * 实际打开的cameraId
+     */
     private String openedCameraId;
-    // 当前获取的帧数
+    /**
+     * 当前获取的帧数
+     */
     private int currentIndex = 0;
-    // 处理的间隔帧
+    /**
+     * 处理的间隔帧
+     */
     private static final int PROCESS_INTERVAL = 30;
-    // 线程池
+    /**
+     * 线程池
+     */
     private ExecutorService imageProcessExecutor;
-    // 需要的权限
+    /**
+     * 需要的权限
+     */
     private static final String[] NEEDED_PERMISSIONS = new String[]{
             Manifest.permission.CAMERA
     };
     private ShowRectView srvRectView;
+    /**
+     * 是否需要检车权限
+     */
+    private boolean isCheckPermission = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,11 +115,8 @@ public class CameraPreviewActivity extends AppCompatActivity implements ViewTree
 
     private void initView() {
         textureView = findViewById(R.id.texture_preview);
-        ImageView ivSwitchCamera = findViewById(R.id.iv_switch_camera);
         srvRectView = findViewById(R.id.srv_rect_view);
-        textureView.getViewTreeObserver().addOnGlobalLayoutListener(this);
-        ivSwitchCamera.setOnClickListener(new View.OnClickListener() {
-
+        findViewById(R.id.iv_switch_camera).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 if (camera2Helper != null) {
@@ -99,18 +126,10 @@ public class CameraPreviewActivity extends AppCompatActivity implements ViewTree
         });
     }
 
-    private boolean checkPermissions(String[] neededPermissions) {
-        if (neededPermissions == null || neededPermissions.length == 0) {
-            return true;
-        }
-        boolean allGranted = true;
-        for (String neededPermission : neededPermissions) {
-            allGranted &= ContextCompat.checkSelfPermission(this, neededPermission) == PackageManager.PERMISSION_GRANTED;
-        }
-        return allGranted;
-    }
-
-    void initCamera() {
+    /**
+     * 初始化相机参数
+     */
+    private void initCamera() {
         camera2Helper = new Camera2Helper.Builder()
                 .cameraListener(this)
                 .maxPreviewSize(new Point(1920, 1080))
@@ -124,6 +143,24 @@ public class CameraPreviewActivity extends AppCompatActivity implements ViewTree
         camera2Helper.start();
     }
 
+    /**
+     * 检查权限
+     *
+     * @param neededPermissions
+     * @return
+     */
+    private boolean checkPermissions(String[] neededPermissions) {
+        if (neededPermissions == null || neededPermissions.length == 0) {
+            return true;
+        }
+        boolean allGranted = true;
+        for (String neededPermission : neededPermissions) {
+            allGranted &= ContextCompat.checkSelfPermission(this, neededPermission) == PackageManager.PERMISSION_GRANTED;
+        }
+        return allGranted;
+    }
+
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -133,39 +170,50 @@ public class CameraPreviewActivity extends AppCompatActivity implements ViewTree
                 isAllGranted &= (grantResult == PackageManager.PERMISSION_GRANTED);
             }
             if (isAllGranted) {
+                isCheckPermission = true;
                 initCamera();
             } else {
+                isCheckPermission = false;
                 Toast.makeText(this, "权限被拒绝", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
     @Override
-    public void onGlobalLayout() {
-        textureView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-        if (!checkPermissions(NEEDED_PERMISSIONS)) {
-            ActivityCompat.requestPermissions(this, NEEDED_PERMISSIONS, ACTION_REQUEST_PERMISSIONS);
-        } else {
-            initCamera();
+    protected void onResume() {
+        super.onResume();
+        if (isCheckPermission) {
+            if (!checkPermissions(NEEDED_PERMISSIONS)) {
+                ActivityCompat.requestPermissions(this, NEEDED_PERMISSIONS, ACTION_REQUEST_PERMISSIONS);
+            } else {
+                if (camera2Helper == null) {
+                    initCamera();
+                }
+                if (camera2Helper != null) {
+                    camera2Helper.start();
+                }
+            }
         }
     }
 
     @Override
     protected void onPause() {
+        isCheckPermission = true;
         if (camera2Helper != null) {
             camera2Helper.stop();
         }
         super.onPause();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (camera2Helper != null) {
-            camera2Helper.start();
-        }
+    /**
+     * 在预览之上绘制方框
+     */
+    public void showRectView() {
+        List<Rect> rects = new ArrayList<>();
+        rects.add(new Rect(200, 300, 500, 600));
+        rects.add(new Rect(500, 500, 700, 800));
+        srvRectView.setRect(rects);
     }
-
 
     @Override
     public void onCameraOpened(CameraDevice cameraDevice, String cameraId, final Size previewSize, final int displayOrientation, boolean isMirror) {
@@ -271,13 +319,6 @@ public class CameraPreviewActivity extends AppCompatActivity implements ViewTree
                 }
             });
         }
-    }
-
-    public void showRectView() {
-        List<Rect> rects = new ArrayList<>();
-        rects.add(new Rect(200, 300, 500, 600));
-        rects.add(new Rect(500, 500, 700, 800));
-        srvRectView.setRect(rects);
     }
 
     @Override

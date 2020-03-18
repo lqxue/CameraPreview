@@ -483,11 +483,7 @@ public class Camera2Helper {
                 throw new RuntimeException("Time out waiting to lock camera opening.");
             }
             cameraManager.openCamera(mCameraId, mDeviceStateCallback, mBackgroundHandler);
-        } catch (CameraAccessException e) {
-            if (camera2Listener != null) {
-                camera2Listener.onCameraError(e);
-            }
-        } catch (InterruptedException e) {
+        } catch (CameraAccessException | InterruptedException e) {
             if (camera2Listener != null) {
                 camera2Listener.onCameraError(e);
             }
